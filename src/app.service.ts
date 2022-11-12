@@ -3,10 +3,10 @@ import mongoose from 'mongoose';
 import fetch from 'node-fetch';
 
 export const projectSchema = new mongoose.Schema({}, { strict: false });
-//export const memberSchema = new mongoose.Schema({}, { strict: false });
+export const memberSchema = new mongoose.Schema({}, { strict: false });
 
 const Project = mongoose.model('Project', projectSchema);
-//const Member = mongoose.model('Member', memberSchema);
+const Member = mongoose.model('Member', memberSchema);
 
 @Injectable()
 export class AppService {
@@ -15,8 +15,10 @@ export class AppService {
 			projects: [],
 			members: [],
 		};
-		data.projects = await this.getProjectsByGroupId(groupId);
+
 		data.members = await this.getMembersByGroupId(groupId);
+		const membersIds = data.members.length ? data.members.map(m => m.id) : [];
+		data.projects = await this.getProjectsByGroupId(groupId, membersIds);
 
 		await this.saveDataToDb(groupId, data);
 
@@ -26,14 +28,17 @@ export class AppService {
 	async saveDataToDb(groupId: number, data: { projects: any[]; members: any[] }) {
 		await this.connectToDb();
 
-		for (const project of data.projects) {
-			await Project.updateOne({ id: project.id, groupId }, { ...project, groupId }, { upsert: true });
+		if (data.projects.length) {
+			for (const project of data.projects) {
+				await Project.updateOne({ id: project.id, groupId }, { ...project, groupId }, { upsert: true });
+			}
 		}
 
-		/*
-		for (const project of data.members) {
-			await Member.updateOne({ id: project.id, groupId }, { ...project, groupId }, { upsert: true });
-		}*/
+		if (data.members.length) {
+			for (const project of data.members) {
+				await Member.updateOne({ id: project.id, groupId }, { ...project, groupId }, { upsert: true });
+			}
+		}
 	}
 
 	async connectToDb() {
@@ -48,9 +53,16 @@ export class AppService {
 			.catch(err => console.log({ ...err }));
 	}
 
-	async getProjectsByGroupId(groupId: number): Promise<any> {
+	async getProjectsByGroupId(groupId: number, membersIds?: number[]): Promise<any> {
 		const url = `groups/${groupId}/projects`;
-		return await this.fetchFromGitLabAPI(url, 'GET');
+		const projects = await this.fetchFromGitLabAPI(url, 'GET');
+
+		for (const project of projects) {
+			const projectMembers = await this.getMembersByProjectId(project.id, membersIds);
+			project.membersIds = projectMembers.length ? projectMembers.map(member => member.id) : [];
+		}
+
+		return projects;
 	}
 
 	async getMembersByGroupId(groupId: number): Promise<any> {
@@ -58,7 +70,11 @@ export class AppService {
 		return await this.fetchFromGitLabAPI(url, 'GET');
 	}
 
-	//getMembersByProjectId(projectId: number, user_ids?: number[]): any {}
+	async getMembersByProjectId(projectId: number, user_ids?: number[]): Promise<any> {
+		const url = `projects/${projectId}/members?${user_ids.length ? 'user_ids=' + user_ids.toString() : ''}`;
+
+		return await this.fetchFromGitLabAPI(url, 'GET');
+	}
 
 	async fetchFromGitLabAPI(url: string, method: string): Promise<any> {
 		const gitLabUrl = `https://gitlab.com/api/v4/${url}`;
