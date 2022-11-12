@@ -7,6 +7,8 @@ const GITLAB_ACCESS_KEY = 'glpat-wAqGQuYRkya57hmser8Z';
 const MONGO_USER = 'gitlabGroups';
 const MONGO_PASS = 'gitlabGroups';
 
+const RESULTS_PER_PAGE = 100;
+
 const projectSchema = new mongoose.Schema({}, { strict: false });
 const memberSchema = new mongoose.Schema({}, { strict: false });
 
@@ -59,7 +61,7 @@ export class AppService {
 
 	async getProjectsByGroupId(groupId: number, membersIds?: number[]): Promise<any> {
 		const url = `groups/${groupId}/projects?`;
-		const projects = await this.fetchFromGitLabAPI(url, 'GET');
+		const projects = await this.fetchPaginatedDataFromGitLabAPI(url, 'GET');
 
 		for (const project of projects) {
 			const projectMembers = await this.getMembersByProjectId(project.id, membersIds);
@@ -71,22 +73,48 @@ export class AppService {
 
 	async getMembersByGroupId(groupId: number): Promise<any> {
 		const url = `groups/${groupId}/members?`;
-		return await this.fetchFromGitLabAPI(url, 'GET', true);
+		return await this.fetchPaginatedDataFromGitLabAPI(url, 'GET', true);
 	}
 
 	async getMembersByProjectId(projectId: number, user_ids?: number[]): Promise<any> {
 		const url = `projects/${projectId}/members?${user_ids.length ? 'user_ids=' + user_ids.toString() : ''}`;
 
-		return await this.fetchFromGitLabAPI(url, 'GET', true);
+		return await this.fetchPaginatedDataFromGitLabAPI(url, 'GET', true);
 	}
 
-	async fetchFromGitLabAPI(url: string, method: string, addAccessToken = false): Promise<any> {
-		const gitLabUrl = `https://gitlab.com/api/v4/${url}${addAccessToken ? '&private_token=' + GITLAB_ACCESS_KEY : ''}`;
+	async fetchPaginatedDataFromGitLabAPI(url: string, method: string, addAccessToken = false): Promise<any> {
+		let results: any[] = [];
+
+		let page = 1;
+
+		let currentPageResults = await this.fetchFromGitLabAPIByPage(url, page, addAccessToken, method);
+
+		results = results.concat(currentPageResults);
+
+		while (results.length === page * RESULTS_PER_PAGE) {
+			page++;
+			currentPageResults = await this.fetchFromGitLabAPIByPage(url, page, addAccessToken, method);
+			results = results.concat(currentPageResults);
+		}
+
+		return results;
+	}
+
+	private async fetchFromGitLabAPIByPage(
+		url: string,
+		page: number,
+		addAccessToken: boolean,
+		method: string
+	): Promise<any[]> {
+		const gitLabUrl = `https://gitlab.com/api/v4/${url}&page=${page}&per_page=${RESULTS_PER_PAGE}${
+			addAccessToken ? '&private_token=' + GITLAB_ACCESS_KEY : ''
+		}`;
 
 		const fetched = await fetch(gitLabUrl, {
 			method,
 		});
 
-		return await fetched.json();
+		const currentPageResults = await fetched.json();
+		return currentPageResults;
 	}
 }
