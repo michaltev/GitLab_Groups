@@ -2,8 +2,13 @@ import { Injectable } from '@nestjs/common';
 import mongoose from 'mongoose';
 import fetch from 'node-fetch';
 
-export const projectSchema = new mongoose.Schema({}, { strict: false });
-export const memberSchema = new mongoose.Schema({}, { strict: false });
+// DB creds and access keys should be stored in a secret after deploying this to an AWS environment
+const GITLAB_ACCESS_KEY = 'glpat-wAqGQuYRkya57hmser8Z';
+const MONGO_USER = 'gitlabGroups';
+const MONGO_PASS = 'gitlabGroups';
+
+const projectSchema = new mongoose.Schema({}, { strict: false });
+const memberSchema = new mongoose.Schema({}, { strict: false });
 
 const Project = mongoose.model('Project', projectSchema);
 const Member = mongoose.model('Member', memberSchema);
@@ -42,8 +47,7 @@ export class AppService {
 	}
 
 	async connectToDb() {
-		const uri =
-			'mongodb://gitlabGroups:gitlabGroups@ac-tfkevby-shard-00-00.klildug.mongodb.net:27017,ac-tfkevby-shard-00-01.klildug.mongodb.net:27017,ac-tfkevby-shard-00-02.klildug.mongodb.net:27017/?ssl=true&replicaSet=atlas-13ka9o-shard-0&authSource=admin&retryWrites=true&w=majority';
+		const uri = `mongodb://${MONGO_USER}:${MONGO_PASS}@ac-tfkevby-shard-00-00.klildug.mongodb.net:27017,ac-tfkevby-shard-00-01.klildug.mongodb.net:27017,ac-tfkevby-shard-00-02.klildug.mongodb.net:27017/?ssl=true&replicaSet=atlas-13ka9o-shard-0&authSource=admin&retryWrites=true&w=majority`;
 		mongoose
 			.connect(uri, {
 				serverSelectionTimeoutMS: 2000,
@@ -54,7 +58,7 @@ export class AppService {
 	}
 
 	async getProjectsByGroupId(groupId: number, membersIds?: number[]): Promise<any> {
-		const url = `groups/${groupId}/projects`;
+		const url = `groups/${groupId}/projects?`;
 		const projects = await this.fetchFromGitLabAPI(url, 'GET');
 
 		for (const project of projects) {
@@ -66,18 +70,18 @@ export class AppService {
 	}
 
 	async getMembersByGroupId(groupId: number): Promise<any> {
-		const url = `groups/${groupId}/members`;
-		return await this.fetchFromGitLabAPI(url, 'GET');
+		const url = `groups/${groupId}/members?`;
+		return await this.fetchFromGitLabAPI(url, 'GET', true);
 	}
 
 	async getMembersByProjectId(projectId: number, user_ids?: number[]): Promise<any> {
 		const url = `projects/${projectId}/members?${user_ids.length ? 'user_ids=' + user_ids.toString() : ''}`;
 
-		return await this.fetchFromGitLabAPI(url, 'GET');
+		return await this.fetchFromGitLabAPI(url, 'GET', true);
 	}
 
-	async fetchFromGitLabAPI(url: string, method: string): Promise<any> {
-		const gitLabUrl = `https://gitlab.com/api/v4/${url}`;
+	async fetchFromGitLabAPI(url: string, method: string, addAccessToken = false): Promise<any> {
+		const gitLabUrl = `https://gitlab.com/api/v4/${url}${addAccessToken ? '&private_token=' + GITLAB_ACCESS_KEY : ''}`;
 
 		const fetched = await fetch(gitLabUrl, {
 			method,
