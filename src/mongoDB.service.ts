@@ -9,6 +9,7 @@ export const Member = mongoose.model('Member', memberSchema);
 
 @Injectable()
 export class MongoService {
+	// DB creds and access keys should be stored in a secret after deploying this to an AWS environment
 	MONGO_USER = 'gitlabGroups';
 	MONGO_PASS = 'gitlabGroups';
 
