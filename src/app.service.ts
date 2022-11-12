@@ -18,32 +18,34 @@ const Member = mongoose.model('Member', memberSchema);
 @Injectable()
 export class AppService {
 	async getDataByGroupId(groupId: number): Promise<any> {
+		await this.connectToDb();
+
 		const data = {
 			projects: [],
 			members: [],
 		};
 
-		data.members = await this.getMembersByGroupId(groupId);
-		const membersIds = data.members.length ? data.members.map(m => m.id) : [];
-		data.projects = await this.getProjectsByGroupId(groupId, membersIds);
+		data.members = await this.getAndSaveMembersByGroupId(groupId);
 
-		await this.saveDataToDb(groupId, data);
+		data.projects = await this.getAndSaveProjectsByGroupId(groupId);
 
 		return data;
 	}
 
-	async saveDataToDb(groupId: number, data: { projects: any[]; members: any[] }) {
-		await this.connectToDb();
-
-		if (data.projects.length) {
-			for (const project of data.projects) {
-				await Project.updateOne({ id: project.id, groupId }, { ...project, groupId }, { upsert: true });
-			}
-		}
-
-		if (data.members.length) {
-			for (const project of data.members) {
-				await Member.updateOne({ id: project.id, groupId }, { ...project, groupId }, { upsert: true });
+	async saveDataToDb(
+		groupId: number,
+		data: any[],
+		modelToSave: mongoose.Model<
+			{},
+			{},
+			{},
+			{},
+			mongoose.Schema<any, mongoose.Model<any, any, any, any, any>, {}, {}, {}, {}, 'type', {}>
+		>
+	) {
+		if (data.length) {
+			for (const object of data) {
+				await modelToSave.updateOne({ id: object.id, groupId }, { ...object, groupId }, { upsert: true });
 			}
 		}
 	}
@@ -59,25 +61,28 @@ export class AppService {
 			.catch(err => console.log({ ...err }));
 	}
 
-	async getProjectsByGroupId(groupId: number, membersIds?: number[]): Promise<any> {
+	async getAndSaveProjectsByGroupId(groupId: number): Promise<any> {
 		const url = `groups/${groupId}/projects?`;
 		const projects = await this.fetchPaginatedDataFromGitLabAPI(url, 'GET');
 
 		for (const project of projects) {
-			const projectMembers = await this.getMembersByProjectId(project.id, membersIds);
+			const projectMembers = await this.getMembersByProjectId(project.id);
 			project.membersIds = projectMembers.length ? projectMembers.map(member => member.id) : [];
 		}
+		this.saveDataToDb(groupId, projects, Project);
 
 		return projects;
 	}
 
-	async getMembersByGroupId(groupId: number): Promise<any> {
+	async getAndSaveMembersByGroupId(groupId: number): Promise<any> {
 		const url = `groups/${groupId}/members?`;
-		return await this.fetchPaginatedDataFromGitLabAPI(url, 'GET', true);
+		const members = await this.fetchPaginatedDataFromGitLabAPI(url, 'GET', true);
+		this.saveDataToDb(groupId, members, Member);
+		return members;
 	}
 
-	async getMembersByProjectId(projectId: number, user_ids?: number[]): Promise<any> {
-		const url = `projects/${projectId}/members?${user_ids.length ? 'user_ids=' + user_ids.toString() : ''}`;
+	async getMembersByProjectId(projectId: number): Promise<any> {
+		const url = `projects/${projectId}/members?`;
 
 		return await this.fetchPaginatedDataFromGitLabAPI(url, 'GET', true);
 	}
