@@ -88,32 +88,26 @@ export class AppService {
 	}
 
 	async fetchPaginatedDataFromGitLabAPI(url: string, method: string, addAccessToken = false): Promise<any> {
+		const gitLabUrl = `https://gitlab.com/api/v4/${url}${addAccessToken ? '&private_token=' + GITLAB_ACCESS_KEY : ''}`;
 		let results: any[] = [];
 
 		let page = 1;
 
-		let currentPageResults = await this.fetchFromGitLabAPIByPage(url, page, addAccessToken, method);
+		let currentPageResults = await this.fetchFromGitLabAPIByPage(gitLabUrl, page, method);
 
 		results = results.concat(currentPageResults);
 
 		while (results.length === page * RESULTS_PER_PAGE) {
 			page++;
-			currentPageResults = await this.fetchFromGitLabAPIByPage(url, page, addAccessToken, method);
+			currentPageResults = await this.fetchFromGitLabAPIByPage(gitLabUrl, page, method);
 			results = results.concat(currentPageResults);
 		}
 
 		return results;
 	}
 
-	private async fetchFromGitLabAPIByPage(
-		url: string,
-		page: number,
-		addAccessToken: boolean,
-		method: string
-	): Promise<any[]> {
-		const gitLabUrl = `https://gitlab.com/api/v4/${url}&page=${page}&per_page=${RESULTS_PER_PAGE}${
-			addAccessToken ? '&private_token=' + GITLAB_ACCESS_KEY : ''
-		}`;
+	private async fetchFromGitLabAPIByPage(url: string, page: number, method: string): Promise<any[]> {
+		const gitLabUrl = `${url}&page=${page}&per_page=${RESULTS_PER_PAGE}`;
 
 		const fetched = await fetch(gitLabUrl, {
 			method,
