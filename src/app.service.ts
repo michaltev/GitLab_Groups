@@ -1,24 +1,17 @@
 import { Injectable } from '@nestjs/common';
-import mongoose from 'mongoose';
 import fetch from 'node-fetch';
+import { Member, MongoService, Project } from './mongoDB.service';
 
 // DB creds and access keys should be stored in a secret after deploying this to an AWS environment
 const GITLAB_ACCESS_KEY = 'glpat-wAqGQuYRkya57hmser8Z';
-const MONGO_USER = 'gitlabGroups';
-const MONGO_PASS = 'gitlabGroups';
 
 const RESULTS_PER_PAGE = 100;
 
-const projectSchema = new mongoose.Schema({}, { strict: false });
-const memberSchema = new mongoose.Schema({}, { strict: false });
-
-const Project = mongoose.model('Project', projectSchema);
-const Member = mongoose.model('Member', memberSchema);
-
 @Injectable()
 export class AppService {
+	mongoService = new MongoService();
 	async getDataByGroupId(groupId: number): Promise<any> {
-		await this.connectToDb();
+		await this.mongoService.connectToDb();
 
 		const data = {
 			projects: [],
@@ -32,35 +25,6 @@ export class AppService {
 		return data;
 	}
 
-	async saveDataToDb(
-		groupId: number,
-		data: any[],
-		modelToSave: mongoose.Model<
-			{},
-			{},
-			{},
-			{},
-			mongoose.Schema<any, mongoose.Model<any, any, any, any, any>, {}, {}, {}, {}, 'type', {}>
-		>
-	) {
-		if (data.length) {
-			for (const object of data) {
-				await modelToSave.updateOne({ id: object.id, groupId }, { ...object, groupId }, { upsert: true });
-			}
-		}
-	}
-
-	async connectToDb() {
-		const uri = `mongodb://${MONGO_USER}:${MONGO_PASS}@ac-tfkevby-shard-00-00.klildug.mongodb.net:27017,ac-tfkevby-shard-00-01.klildug.mongodb.net:27017,ac-tfkevby-shard-00-02.klildug.mongodb.net:27017/?ssl=true&replicaSet=atlas-13ka9o-shard-0&authSource=admin&retryWrites=true&w=majority`;
-		mongoose
-			.connect(uri, {
-				serverSelectionTimeoutMS: 2000,
-				dbName: 'gitlabGroups',
-				authSource: 'admin',
-			})
-			.catch(err => console.log({ ...err }));
-	}
-
 	async getAndSaveProjectsByGroupId(groupId: number): Promise<any> {
 		const url = `groups/${groupId}/projects?`;
 		const projects = await this.fetchPaginatedDataFromGitLabAPI(url, 'GET');
@@ -69,7 +33,7 @@ export class AppService {
 			const projectMembers = await this.getMembersByProjectId(project.id);
 			project.membersIds = projectMembers.length ? projectMembers.map(member => member.id) : [];
 		}
-		this.saveDataToDb(groupId, projects, Project);
+		this.mongoService.saveDataToDb(groupId, projects, Project);
 
 		return projects;
 	}
@@ -77,7 +41,7 @@ export class AppService {
 	async getAndSaveMembersByGroupId(groupId: number): Promise<any> {
 		const url = `groups/${groupId}/members?`;
 		const members = await this.fetchPaginatedDataFromGitLabAPI(url, 'GET', true);
-		this.saveDataToDb(groupId, members, Member);
+		this.mongoService.saveDataToDb(groupId, members, Member);
 		return members;
 	}
 
